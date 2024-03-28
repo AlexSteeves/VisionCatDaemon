@@ -1,20 +1,27 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
+
 #include <stdbool.h>
-#include <stdint.h>
-#include <signal.h>
+
+
+
+#include<windows.h>
+
+
+
+
 
 #define EXT_SUCCESS 0
 #define EXT_ERR_TOO_FEW_ARGS 1
-#define EXT_ERR_INIT_INOTIFY 2
+
 
 int IeventQueue = 1;
+
+
 int main(int argc, char** argv){
 
-    char *basePath = NULL;
-    char *token = NULL;
-
+  
+    //Check if there are enough arguments
     if(argc < 2){
         fprintf(stderr, "Usage: visioncat Path\n");
         exit(EXT_ERR_TOO_FEW_ARGS);
@@ -23,31 +30,48 @@ int main(int argc, char** argv){
     //Dynamic memory allocation
     //Malloc allocated an amount of memory on the heap
     //Strings in C are terminated with a null character
-    basePath = (char *)malloc(sizeof(char) * (strlen(argv[1]) + 1));
+    char* directoryToWatch = argv[1];
 
-    strcpy(basePath, argv[1]);
+    HANDLE hDirectory = FindFirstChangeNotificationA(
+        directoryToWatch, 
+        FALSE, 
+        FILE_NOTIFY_CHANGE_LAST_WRITE);
 
-
-    token = strtok(basePath, "\\");
-    while(token != NULL){
-        basePath = token;
-        token = strtok(NULL, "\\");
+    if(hDirectory == INVALID_HANDLE_VALUE){
+        fprintf(stderr, "Error: FindFirstChangeNotification failed.\n");
+        exit(EXIT_FAILURE);
     }
 
-    IeventQueue = inotify_init();
-    if(IeventQueue == -1){
-        fprintf(stderr, "Error initialising inotify intance!\n");
-        exit(EXT_ERR_INIT_INOTIFY);
-    }
+
+    int numberOfChanges = 0;
     //Run the Daemon forever
     while(true){
-        a = read(basePath);
+    printf("Waiting for changes in %s\n", directoryToWatch);
+    DWORD waitStatus = WaitForSingleObject(hDirectory, INFINITE);
 
+
+    switch(waitStatus){
+        case WAIT_OBJECT_0:
+            numberOfChanges++;
+            printf("Change detected in %s. This is the %dth change.\n", directoryToWatch, numberOfChanges);
+            
+
+            if(FindNextChangeNotification(hDirectory) == FALSE){
+                fprintf(stderr, "Error: FindNextChangeNotification failed.\n");
+                exit(EXIT_FAILURE);
+            }
+            break;
+
+            default:
+                fprintf(stderr, "Error: Unhandled wait status.\n");
+                exit(EXIT_FAILURE);
+                break;
+        }
     }
 
-    printf("%s\n", basePath);
+    //Close the handle
+    FindCloseChangeNotification(hDirectory);
 
-
-    exit(EXIT_SUCCESS);
+    return EXT_SUCCESS;
 }
 
